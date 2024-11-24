@@ -5,7 +5,10 @@ import Login from "./Screens/Login";
 import OHIFViewer from "./Screens/OHIFViewer";
 import Dcmvi from "./Screens/dcmViewer";
 import SignUp from "./Screens/signUp";
+import Admin from "./Screens/admin";
+
 function App() {
+  
   return (
     <div>
       <Router>
@@ -15,6 +18,7 @@ function App() {
           <Route path="/MammoPred" element={<OHIFViewer />} />
           <Route path="/DcmViewer" element={<Dcmvi />} />
           <Route path="/signup" element={<SignUp />} />
+          <Route path="/admin" element = {<Admin />} />
         </Routes>
       </Router>
     </div>

@@ -1,28 +1,73 @@
 import {
+  Button,
   Card,
   CardBody,
   CardHeader,
   Typography,
 } from "@material-tailwind/react";
-import React, { useState, useEffect } from "react";
+import axios from "axios";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 const Hero = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
+  const [res, setRes] = useState(null);
+  const TABLE_HEAD = ["Dcm series", ""]; // Table headers
   useEffect(() => {
-    // Retrieve user from localStorage
     const storedUser = localStorage.getItem("user");
     if (storedUser) {
-      setUser(JSON.parse(storedUser));
+      const user = JSON.parse(storedUser);
+      setUser(user);
+
+      // Fetch folders under the doctor's email
+      const fetchFolders = async () => {
+        try {
+          const response = await axios.get(
+            `http://localhost:8000/getFolders?email=${user.email}`
+          );
+
+          console.log("Received folders:", response.data);
+          setRes(response.data); // Store folder data
+        } catch (error) {
+          console.error("Error fetching folders:", error);
+        }
+      };
+
+      fetchFolders();
     }
   }, []);
+
+  const ViewFolder = async (e) => {
+    try {
+      console.log(e.target.id);
+      const response = await axios.get(
+        `http://localhost:8000/getFolderContents`,
+        {
+          params: {
+            email: user.email,
+            folderName: e.target.id,
+          },
+        }
+      );
+      console.log("Folder contents:", response.data);
+
+      // Navigate to the viewer with folder contents
+      navigate("/DcmViewer", { state: [response.data, e.target.id] }); // #TODO changed this
+    } catch (error) {
+      console.error("Error fetching folder contents:", error);
+      // Add user feedback
+      alert("Error loading folder contents. Please try again.");
+    }
+  };
+
   return (
-    <div className="hero py-14">
-      <section className="bg-[#0A0A23] h-screen flex flex-col justify-center items-center text-center">
+    <div className="hero py-14 mt-4">
+      <section className="bg-[#0A0A23] h-full flex flex-col justify-center items-center text-center">
         {/* Main Title */}
         <h1 className="navbar-brand text-white text-7xl tracking-wider leading-tight shadow-lg my-6 mt-20">
-          DIGICLINICS - R<em className="text-red-500 font-bold">.AI.</em>DIOLOGY
+          DIGICLINICS - R<em className="text-red-500 font-bold">.AI.</em>
+          DIOLOGY
         </h1>
         <h1 className="text-3xl md:text-4xl lg:text-5xl text-[#60CFFF] font-bold my-6">
           Extensible Mammogram web imaging
@@ -92,6 +137,66 @@ const Hero = () => {
             </CardBody>
           </Card>
         </div>
+        {res && (
+          <div className="w-screen flex flex-col justify-center items-center">
+            <h1 className="text-xl md:text-2xl lg:text-3xl text-[#60CFFF] font-bold text-center">
+              Unannotated Dicom Series
+            </h1>
+            <table className="mt-4 table-auto text-center rounded-lg w-1/3">
+              <thead className="bg-indigo-500">
+                <tr>
+                  {TABLE_HEAD.map((head) => (
+                    <th
+                      key={head}
+                      className="border-y border-blue-gray-100 bg-blue-gray-50/50 p-4"
+                    >
+                      <Typography
+                        variant="h4"
+                        color="black"
+                        className="font-normal leading-none"
+                      >
+                        {head}
+                      </Typography>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="bg-white">
+                {res.map((folderName, index) => {
+                  const isLast = index === res.length - 1;
+                  const classes = isLast
+                    ? "p-2"
+                    : "p-2 border-b border-blue-gray-50 ";
+
+                  return (
+                    <tr key={folderName} className="">
+                      <td className={classes}>
+                        <Typography
+                          variant="h5"
+                          color="blue-gray"
+                          className="font-normal"
+                        >
+                          {folderName}
+                        </Typography>
+                      </td>
+                      <td className={classes}>
+                        <Button
+                          variant="gradient"
+                          className="flex items-center gap-3"
+                          size="sm"
+                          id={folderName}
+                          onClick={ViewFolder}
+                        >
+                          View
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
     </div>
   );

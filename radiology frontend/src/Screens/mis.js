@@ -1,17 +1,13 @@
-import React from 'react'
-import Hero from '../components/Hero';
-import About from '../components/About';
-import Contact from '../components/Contact';
-import Features from '../components/Features';
+import React from "react";
+import Hero from "../components/Hero";
+import Else from "./Else";
 const Mis = () => {
-    return (
-      <div className='flex flex-col bg-[#0A0A23] gap-10'>
-          <Hero/>
-          <Features/>
-          <About/>
-          <Contact/>
-      </div>
-    )
-  }
-  
-  export default Mis
+  return (
+    <div className="flex flex-col bg-[#0A0A23] gap-32 h-full">
+      <Hero className="h-auto" />
+      <Else />
+    </div>
+  );
+};
+
+export default Mis;

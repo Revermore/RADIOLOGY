@@ -8,28 +8,43 @@ const SignUp = () => {
   const [role, setRole] = useState("");
   const navigate = useNavigate();
   const [password, setPassword] = useState("");
-  const handleRoleChange = (event) => {
-    setRole(event.target.value);
-  };
   // Handle form submit
   const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log(username + " " +  email + " " +password + " " +role)
+    console.log(username + " " + email + " " + password + " " + role);
     try {
       const response = await axios.post("http://localhost:5000/auth/signup", {
-        name:username,
+        name: username,
         email,
         password,
-        role, // Optional: if role is not provided, it defaults to 'guest'
+        role, // Optional: if role is not provided, it defaults to 'AI Engineer'
       });
 
+      // Create a folder for the Radiologist after successful signup
+      if (role === "Radiologist") {
+        console.log("Creating folder for:", email);
+        try {
+          const folderResponse = await axios.post(
+            "http://localhost:8000/createFolder",
+            { email }, // Ensure the body is being sent correctly
+            {
+              headers: { "Content-Type": "application/json" }, // Explicitly set content type
+            }
+          );
+          console.log("Folder creation successful:", folderResponse.data);
+        } catch (folderError) {
+          console.error("Error creating folder for the doctor:", folderError);
+          alert("Failed to create folder for the doctor.");
+        }
+      }
       // Redirect to login after signup success
       navigate("/");
     } catch (error) {
       console.error("Error signing up:", error);
-      // Handle error message here
+      alert("Signup failed. Please try again.");
     }
   };
+
   return (
     <div className="flex flex-col justify-center items-center bg-[#0A0A23] min-h-screen">
       <div className="w-full max-w-md p-8 space-y-6 bg-gray-800 rounded-lg shadow-lg">
@@ -111,10 +126,10 @@ const SignUp = () => {
               className="w-full p-2 mt-1 text-white bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
               <option value="" disabled>
-      Select your role
-    </option>
+                Select your role
+              </option>
               <option value="Radiologist">Radiologist</option>
-              <option value="Guest">Guest</option>
+              <option value="AI Engineer">AI Engineer</option>
               <option value="Admin">Admin</option>
             </select>
           </div>

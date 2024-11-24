@@ -4,7 +4,9 @@ import {
   DialogBody,
   DialogFooter,
   DialogHeader,
+  Input,
 } from "@material-tailwind/react";
+import axios from "axios";
 import cornerstone from "cornerstone-core";
 import cornerstoneMath from "cornerstone-math";
 import cornerstoneTools from "cornerstone-tools";
@@ -12,7 +14,7 @@ import cornerstoneWADOImageLoader from "cornerstone-wado-image-loader";
 import dicomParser from "dicom-parser";
 import Hammer from "hammerjs";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-
+import { useLocation } from "react-router-dom";
 cornerstoneWADOImageLoader.external.cornerstone = cornerstone;
 cornerstoneWADOImageLoader.external.dicomParser = dicomParser;
 cornerstoneTools.external.cornerstoneMath = cornerstoneMath;
@@ -21,7 +23,21 @@ cornerstoneTools.external.Hammer = Hammer;
 cornerstoneTools.init();
 
 const Dcmvi = (props) => {
-  const fileInputRef = useRef(null);
+  const location = useLocation();
+  let ass = location.state; // Access the 'res' object here
+  let res;
+  let finalDirName;
+  const [dirname, setDirname] = useState(""); // Directory name state
+  useEffect(() => {
+    if (ass && ass[1] !== finalDirName) {
+      // Ensure the dirname is only set when it changes
+      console.log(ass);
+      res = ass[0];
+      setDirname(ass[1]); // Set state only if ass[1] is different
+      finalDirName = ass[1]; // Update the local variable (finalDirName) as well
+    }
+  }, [ass]); // Add ass as a dependency so it only runs when ass changes
+  const [user, setUser] = useState(null);
   const viewerRef = useRef(null);
   const yap = useRef(null);
   const q1 = useRef(null);
@@ -65,12 +81,14 @@ const Dcmvi = (props) => {
 
       if (Math.abs(dragDistance) > 10) {
         const direction = dragDistance > 0 ? 1 : -1;
+        const currentLength = imagesLOL.current?.length || 0;
+
         let newIndex = currentIndexRef.current + direction;
 
         // Ensure we stay within bounds
         if (newIndex < 0) newIndex = 0;
-        if (newIndex >= imagesLOL.current.length)
-          newIndex = imagesLOL.current.length - 1;
+        if (newIndex >= currentLength) newIndex = currentLength - 1;
+
         console.log("newIndex = " + newIndex);
         currentIndexRef.current = newIndex; // Update the ref directly
 
@@ -81,13 +99,14 @@ const Dcmvi = (props) => {
         setDragStartY(event.clientY); // Update drag start for smooth scrolling
       }
     },
-    [dragStartY, isStackScrollEnabled, imagesLOL.current.length]
+    [dragStartY, isStackScrollEnabled]
   );
-
   // Function to update the displayed image based on index
   const updateTheImage = async (index) => {
     try {
       const image = await cornerstone.loadImage(imagesLOL.current[index]);
+      const { columns, rows } = image;
+      console.log("Width:", columns, "Height:", rows);
       cornerstone.displayImage(viewerRef.current, image);
     } catch (error) {
       console.error("Error loading image:", error);
@@ -95,42 +114,107 @@ const Dcmvi = (props) => {
   };
 
   useEffect(() => {
-    cornerstoneTools.init();
-    console.log(cornerstoneTools);
-    const element = viewerRef.current;
-    cornerstone.enable(element);
-    const PanTool = cornerstoneTools.PanTool;
-    const ZoomTool = cornerstoneTools.ZoomTool;
-    const LengthTool = cornerstoneTools.LengthTool;
-    const AngleTool = cornerstoneTools.AngleTool;
-    const ProbeTool = cornerstoneTools.ProbeTool;
-    const EraserTool = cornerstoneTools.EraserTool;
-    const FreehandRoiTool = cornerstoneTools.FreehandRoiTool;
-    const EllipticalRoiTool = cornerstoneTools.EllipticalRoiTool;
-    const MagnifyTool = cornerstoneTools.MagnifyTool;
-    const RotateTool = cornerstoneTools.RotateTool;
-    const ShadeTool = cornerstoneTools.WwwcTool;
-    const RectangleRoiTool = cornerstoneTools.RectangleRoiTool;
-    // Add tools to the element
-    try {
-      cornerstoneTools.addTool(PanTool);
-      cornerstoneTools.addTool(ZoomTool);
-      cornerstoneTools.addTool(LengthTool);
-      cornerstoneTools.addTool(ProbeTool);
-      cornerstoneTools.addTool(AngleTool);
-      cornerstoneTools.addTool(EraserTool);
-      cornerstoneTools.addTool(FreehandRoiTool);
-      cornerstoneTools.addTool(EllipticalRoiTool);
-      cornerstoneTools.addTool(MagnifyTool);
-      cornerstoneTools.addTool(RotateTool);
-      cornerstoneTools.addTool(ShadeTool);
-      cornerstoneTools.addTool(RectangleRoiTool);
-    } catch (err) {
-      console.log("ERROR IN USEEFFECT: " + err);
+    window.scrollTo(0, 10);
+    const storedUser = localStorage.getItem("user");
+    if (storedUser) {
+      const user = JSON.parse(storedUser);
+      setUser(user);
+      cornerstoneTools.init();
+      const element = viewerRef.current;
+      cornerstone.enable(element);
+
+      // Load the tools once
+      const tools = [
+        cornerstoneTools.PanTool,
+        cornerstoneTools.ZoomTool,
+        cornerstoneTools.LengthTool,
+        cornerstoneTools.ProbeTool,
+        cornerstoneTools.AngleTool,
+        cornerstoneTools.EraserTool,
+        cornerstoneTools.FreehandRoiTool,
+        cornerstoneTools.EllipticalRoiTool,
+        cornerstoneTools.MagnifyTool,
+        cornerstoneTools.RotateTool,
+        cornerstoneTools.WwwcTool,
+        cornerstoneTools.RectangleRoiTool,
+      ];
+
+      tools.forEach((tool) => {
+        try {
+          cornerstoneTools.addTool(tool);
+        } catch (err) {
+          console.log("Error adding tool:", err);
+        }
+      });
+
+      // Async loading of images
+      const loadImage = async () => {
+        finalDirName = ass[1];
+        console.log("Directory name is set! " + finalDirName);
+        // Make sure to clear the file manager FIRST
+        cornerstoneWADOImageLoader.wadouri.fileManager.purge();
+        const loadedImageIds = [];
+        const negate = res.length;
+
+        // Process all files in a single batch
+        const allFilePromises = res.map(async (file) => {
+          console.log(user.email + "   " + file.name);
+          const fileUrl = `http://localhost:8000/getFile?email=${user.email}&folderName=${finalDirName}&fileName=${file.name}`;
+          const response = await fetch(fileUrl);
+          if (!response.ok) throw new Error(`Failed to fetch file: ${fileUrl}`);
+          return response.blob();
+        });
+
+        try {
+          // Wait for all files to be fetched
+          const fileBlobs = await Promise.all(allFilePromises);
+
+          // Now add them all in sequence
+          fileBlobs.forEach((blob) => {
+            const imageId =
+              cornerstoneWADOImageLoader.wadouri.fileManager.add(blob);
+            // Extract the number from dicomfile:XX
+            let number = parseInt(imageId.split(":")[1]);
+
+            // If number is >= negate (87 in your case), subtract negate
+            if (number >= negate) {
+              number = number - negate;
+            }
+
+            // Store in the correct position in loadedImageIds array
+            loadedImageIds[number] = `dicomfile:${number}`;
+          });
+
+          // Filter out any undefined entries and ensure array is dense
+          const finalImageIds = loadedImageIds.filter((id) => id !== undefined);
+
+          // Set the ref only once all files are processed and sorted
+          imagesLOL.current = finalImageIds;
+          console.log(imagesLOL.current);
+
+          if (viewerRef.current && finalImageIds.length > 0) {
+            const firstImage = await cornerstone.loadImage(finalImageIds[0]);
+            const { columns, rows } = firstImage;
+            console.log("Width:", columns, "Height:", rows);
+            cornerstone.displayImage(viewerRef.current, firstImage);
+            setImageLoaded(true);
+          }
+        } catch (e) {
+          console.error("Error in loadImage:", e);
+        }
+      };
+      // Add flag to prevent double loading
+      let isLoading = false;
+      if (ass && !isLoading) {
+        isLoading = true;
+        loadImage();
+      }
+
+      return () => {
+        cornerstone.disable(element);
+        cornerstoneWADOImageLoader.wadouri.fileManager.purge();
+      };
     }
-    return () => {
-      cornerstone.disable(element);
-    };
   }, []);
 
   const handleFolderUpload = async (event) => {
@@ -147,6 +231,8 @@ const Dcmvi = (props) => {
     if (viewerRef.current && loadedImageIds.length > 0) {
       try {
         const firstImage = await cornerstone.loadImage(loadedImageIds[0]);
+        const { columns, rows } = firstImage;
+        console.log("Width:", columns, "Height:", rows);
         cornerstone.displayImage(viewerRef.current, firstImage);
         setImageLoaded(true);
       } catch (error) {
@@ -158,6 +244,7 @@ const Dcmvi = (props) => {
   function collectAllAnnotations(imageIds) {
     const allAnnotations = {};
     let lmao = {};
+    console.log(imageIds);
     imageIds.forEach((imageId) => {
       const toolState =
         cornerstoneTools.globalImageIdSpecificToolStateManager.saveImageIdToolState(
@@ -331,9 +418,12 @@ const Dcmvi = (props) => {
     });
     coords.current[0] = lmao;
     console.log(coords.current);
+    console.log(imagesLOL.current);
     for (let i = 0; i < imagesLOL.current.length; i++) {
       if (coords.current[0][`dicomfile:${i}`].length != 0) {
-        editedOnly.current.push(i);
+        if (editedOnly.current.indexOf(i) == -1) {
+          editedOnly.current.push(i);
+        }
       }
     }
     console.log(editedOnly.current);
@@ -492,9 +582,7 @@ const Dcmvi = (props) => {
   // UseEffect to react to changes in the `clicked` state
   useEffect(() => {
     if (clicked) {
-      requestAnimationFrame(() => {
-        createMasks(); // Run the mask creation logic
-      });
+      createMasks(); // Run the mask creation logic
     }
   }, [clicked]); // Dependency on clicked state
 
@@ -803,10 +891,95 @@ const Dcmvi = (props) => {
     }
   };
 
-  const saveAnnotations = () => {
-    const annotationsJSON = collectAllAnnotations(imagesLOL.current);
-    setJsonobj(annotationsJSON);
-    // console.log(annotationsJSON);
+  const saveAnnotations = async () => {
+    try {
+      console.log(imagesLOL.current);
+
+      // Get the raw annotations
+      const rawAnnotations = collectAllAnnotations(imagesLOL.current);
+
+      // If it's already a string, parse it first
+      const annotationsObj =
+        typeof rawAnnotations === "string"
+          ? JSON.parse(rawAnnotations)
+          : rawAnnotations;
+
+      // Convert to a properly formatted JSON object
+      const cleanAnnotationsJSON = JSON.stringify(annotationsObj, null, 2);
+
+      // If you need the object form for setJsonObj
+      const annotationsAsObject = JSON.parse(cleanAnnotationsJSON);
+      setJsonobj(annotationsAsObject);
+
+      // Log to verify format
+      console.log("Clean annotations:", annotationsAsObject);
+      if (finalDirName) {
+        finalDirName = dirname;
+      }
+    } catch (error) {
+      console.error("Error in saveAnnotations:", error);
+    }
+  };
+
+  const sendAnnos = async () => {
+    if (!imagesLOL.current) {
+      alert("Open a DICOM series and annotate!");
+      return;
+    }
+    if (!finalDirName) {
+      // Prevent setting the folder name state again if it's already being shown
+      alert("Set the folder name!");
+      return; // Prevent API calls without a folder name
+    }
+    console.log(finalDirName + "is set!");
+    console.log(user.email);
+    try {
+      // Fetch folder contents
+      const response = await axios.get(
+        "http://localhost:8000/getFolderContents",
+        {
+          params: {
+            email: user.email,
+            folderName: finalDirName,
+          },
+        }
+      );
+      const files = response.data;
+
+      console.log("jsonobj:", jsonobj); // Check if it's a valid object
+      console.log("files:", files); // Ensure it's an array or expected file format #TODO files start from dicomImage:1
+      console.log("finalDirName:", finalDirName); // Make sure it's not empty
+
+      // Upload files to AI endpoint
+      const uploadAIResponse = await axios.post(
+        "http://localhost:8000/uploadAI",
+        {
+          email: user.email,
+          selectedFolder: finalDirName,
+          annotationsJSON: jsonobj, // Send clean object
+          files,
+        }
+      );
+
+      if (uploadAIResponse.status === 201) {
+        console.log("Upload successful:", uploadAIResponse.data);
+
+        // Delete the folder if upload is successful
+        const deleteResponse = await axios.delete(
+          "http://localhost:8000/deleteFolder",
+          {
+            data: { email: user.email, selectedFolder: finalDirName },
+          }
+        );
+
+        if (deleteResponse.status === 200) {
+          console.log("Folder deleted successfully:", deleteResponse.data);
+          alert("Folder sent successfully! You can now leave this page.");
+        }
+      }
+    } catch (error) {
+      console.error("Error in sending Annotations:", error);
+    }
   };
 
   const Next = () => {
@@ -832,70 +1005,184 @@ const Dcmvi = (props) => {
     }, 500);
   };
 
+  // Handle directory name input
+  const onChangeName = ({ target }) => setDirname(target.value);
+
+  const handleGoBack = () => {
+    window.history.back();
+  };
+
   return (
-    <div className="bg-[#0A0A23] h-screen flex flex-col justify-center items-center text-center overflow-y-visible">
-      <h1 className="p-4 mt-4 text-7xl text-center text-[#60CFFF] font-body">
-        DICOM Viewer
-      </h1>
-      <div className="bg-white">
-        <input
-          type="file"
-          webkitdirectory="true"
-          directory="true"
-          ref={fileInputRef}
-          onChange={handleFolderUpload}
-        />
-      </div>
-      <div className=" bg-indigo-200 w-[1250px] h-[800px] m-8 flex-col rounded-lg items-center justify-center">
-        <div className="m-2 flex justify-evenly">
-          <Button
-            ripple={true}
-            color={isStackScrollEnabled ? "green" : "blue"}
-            onClick={handleStackScrollToggle}
+    <div className="bg-[#0A0A23] h-full w-full">
+      <Button color="red" className="mt-4 ml-4 text-md" onClick={handleGoBack}>
+        Back
+      </Button>
+      <div className="bg-[#0A0A23] h-full w-full flex justify-evenly text-center overflow-y-visible p-4 pt-10 gap-10">
+        <div className="flex">
+          <div
+            className=" bg-black w-[1024px] h-[1024px] rounded-lg mx-auto"
+            ref={viewerRef}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
           >
-            Stack Scroll
-          </Button>
-          <Button
-            ripple={true}
-            color={activeTool === "Zoom" ? "green" : "blue"}
-            onClick={handleZoomToggle}
-          >
-            Zoom
-          </Button>
-          <Button
-            ripple={true}
-            color={activeTool === "Pan" ? "green" : "blue"}
-            onClick={handlePanToggle}
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              height="2em"
-              width="2em"
-              {...props}
+            {!imageLoaded && (
+              <div className="flex justify-center items-center">
+                <span className="text-white text-2xl my-auto mx-auto">
+                  No image loaded yet
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="w-1/4 gap-2">
+          <div className="relative flex w-full max-w-[24rem] mb-4 mx-auto">
+            <Input
+              type="text"
+              variant="outlined"
+              label="Folder Name"
+              placeholder="Folder Name"
+              value={dirname}
+              onChange={onChangeName}
+            />
+            <Button
+              size="sm"
+              color={dirname ? "blue" : "gray"}
+              disabled={!dirname}
+              className="!absolute right-1 top-1 rounded"
+              onClick={() => {
+                finalDirName = dirname;
+              }}
             >
-              <path d="M18 11h-5V6h3l-4-4-4 4h3v5H6V8l-4 4 4 4v-3h5v5H8l4 4 4-4h-3v-5h5v3l4-4-4-4z" />
-            </svg>
-          </Button>
-          <Button
-            ripple={true}
-            color={activeTool === "Length" ? "green" : "blue"}
-            onClick={handleLengthTool}
-          >
-            <svg
-              viewBox="0 0 240 1000"
-              fill="currentColor"
-              height="2em"
-              width="2em"
-              {...props}
+              Confirm
+            </Button>
+          </div>
+          <div className="mb-4 grid grid-cols-2 gap-2">
+            <Button
+              variant="gradient"
+              className="flex items-center justify-center gap-3 relative w-full h-full"
+              size="lg"
             >
-              <path d="M168 688c48 22.667 72 60 72 112 0 33.333-11.667 61.667-35 85s-51.667 35-85 35-61.667-11.667-85-35-35-51.667-35-85c0-52 24-89.333 72-112V310C24 287.333 0 250.667 0 200c0-33.333 11.667-61.667 35-85s51.667-35 85-35 61.667 11.667 85 35 35 51.667 35 85c0 50.667-24 87.333-72 110v378M52 200c0 18.667 6.667 34.667 20 48 13.333 13.333 29.333 20 48 20s35-6.667 49-20 21-29.333 21-48c0-20-7-36.667-21-50-14-13.333-30.333-20-49-20s-34.667 6.667-48 20c-13.333 13.333-20 30-20 50m68 668c18.667 0 35-6.667 49-20s21-29.333 21-48c0-20-7-36.667-21-50-14-13.333-30.333-20-49-20s-34.667 6.667-48 20c-13.333 13.333-20 30-20 50 0 18.667 6.667 34.667 20 48 13.333 13.333 29.333 20 48 20" />
-            </svg>
-          </Button>
-          <Button
+              <label className="absolute inset-0 flex items-center justify-center gap-3 cursor-pointer">
+                <input
+                  onChange={handleFolderUpload} // Trigger Upload function
+                  className="absolute inset-0 opacity-0 cursor-pointer"
+                  type="file"
+                  webkitdirectory="true"
+                  directory="true"
+                />
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={2}
+                  stroke="currentColor"
+                  className="h-5 w-5"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z"
+                  />
+                </svg>
+                <p className="text-md">Upload Folder</p>
+              </label>
+            </Button>
+            <Button
+              ripple={true}
+              color="red"
+              onClick={sendAnnos}
+              className="text-md"
+            >
+              Send
+            </Button>
+          </div>
+          <div className="my-4 grid grid-cols-4 gap-2">
+            <Button
+              ripple={true}
+              color={isStackScrollEnabled ? "green" : "blue"}
+              onClick={handleStackScrollToggle}
+              size="sm"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke-width="1.5"
+                stroke="currentColor"
+                className="mx-auto"
+                height="3em"
+                width="3em"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M8.25 15 12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9"
+                />
+              </svg>
+            </Button>
+            <Button
+              ripple={true}
+              color={activeTool === "Zoom" ? "green" : "blue"}
+              onClick={handleZoomToggle}
+              size="sm"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke-width="1.5"
+                stroke="currentColor"
+                className="mx-auto"
+                height="3em"
+                width="3em"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607ZM10.5 7.5v6m3-3h-6"
+                />
+              </svg>
+            </Button>
+            <Button
+              ripple={true}
+              color={activeTool === "Pan" ? "green" : "blue"}
+              onClick={handlePanToggle}
+              size="sm"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                className="mx-auto"
+                height="3em"
+                width="3em"
+                {...props}
+              >
+                <path d="M18 11h-5V6h3l-4-4-4 4h3v5H6V8l-4 4 4 4v-3h5v5H8l4 4 4-4h-3v-5h5v3l4-4-4-4z" />
+              </svg>
+            </Button>
+            <Button
+              ripple={true}
+              color={activeTool === "Length" ? "green" : "blue"}
+              onClick={handleLengthTool}
+              size="sm"
+            >
+              <svg
+                viewBox="0 0 240 1000"
+                fill="currentColor"
+                className="mx-auto"
+                height="3em"
+                width="3em"
+                {...props}
+              >
+                <path d="M168 688c48 22.667 72 60 72 112 0 33.333-11.667 61.667-35 85s-51.667 35-85 35-61.667-11.667-85-35-35-51.667-35-85c0-52 24-89.333 72-112V310C24 287.333 0 250.667 0 200c0-33.333 11.667-61.667 35-85s51.667-35 85-35 61.667 11.667 85 35 35 51.667 35 85c0 50.667-24 87.333-72 110v378M52 200c0 18.667 6.667 34.667 20 48 13.333 13.333 29.333 20 48 20s35-6.667 49-20 21-29.333 21-48c0-20-7-36.667-21-50-14-13.333-30.333-20-49-20s-34.667 6.667-48 20c-13.333 13.333-20 30-20 50m68 668c18.667 0 35-6.667 49-20s21-29.333 21-48c0-20-7-36.667-21-50-14-13.333-30.333-20-49-20s-34.667 6.667-48 20c-13.333 13.333-20 30-20 50 0 18.667 6.667 34.667 20 48 13.333 13.333 29.333 20 48 20" />
+              </svg>
+            </Button>
+            {/* <Button
             ripple={true}
             color={activeTool === "Angle" ? "green" : "blue"}
             onClick={handleAngleTool}
+            size="md"
           >
             <svg
               fill="none"
@@ -911,243 +1198,247 @@ const Dcmvi = (props) => {
                 clipRule="evenodd"
               />
             </svg>
-          </Button>
-          <Button
-            ripple={true}
-            color={activeTool === "Probe" ? "green" : "blue"}
-            onClick={handleProbleTool}
-          >
-            <svg
-              name="dot-circle"
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 512 512"
-              width="2em"
-              height="2em"
-              fill="cyan"
-            >
-              <title>Dot Circle</title>
-              <path d="M256 56c110.532 0 200 89.451 200 200 0 110.532-89.451 200-200 200-110.532 0-200-89.451-200-200 0-110.532 89.451-200 200-200m0-48C119.033 8 8 119.033 8 256s111.033 248 248 248 248-111.033 248-248S392.967 8 256 8zm0 168c-44.183 0-80 35.817-80 80s35.817 80 80 80 80-35.817 80-80-35.817-80-80-80z"></path>
-            </svg>
-          </Button>
-          <Button
-            ripple={true}
-            color={activeTool === "Rectangle" ? "green" : "blue"}
-            onClick={handleRectangleTool}
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              height="2em"
-              width="2em"
-              {...props}
-            >
-              <title>Rectangle</title>
-              <path d="M4 6v13h16V6H4m14 11H6V8h12v9z" />
-            </svg>
-          </Button>
-        </div>
-        <div className="m-2 flex justify-evenly">
-          <Button
-            ripple={true}
-            color={activeTool === "Eraser" ? "green" : "blue"}
-            onClick={handleEraserTool}
-          >
-            <svg
-              fill="currentColor"
-              viewBox="0 0 16 16"
-              height="2em"
-              width="2em"
-              {...props}
-            >
-              <path d="M8.086 2.207a2 2 0 012.828 0l3.879 3.879a2 2 0 010 2.828l-5.5 5.5A2 2 0 017.879 15H5.12a2 2 0 01-1.414-.586l-2.5-2.5a2 2 0 010-2.828l6.879-6.879zm.66 11.34L3.453 8.254 1.914 9.793a1 1 0 000 1.414l2.5 2.5a1 1 0 00.707.293H7.88a1 1 0 00.707-.293l.16-.16z" />
-            </svg>
-          </Button>
-          <Button
-            ripple={true}
-            color={activeTool === "FHR" ? "green" : "blue"}
-            onClick={handleFHRTool}
-          >
-            <svg
-              fill="none"
-              viewBox="0 0 15 15"
-              height="2em"
-              width="2em"
-              {...props}
-            >
-              <path
-                stroke="currentColor"
-                d="M1.5 5C3 2 7.3.5 6.5 2.5 5.5 5-.5 9.5 3 11c1.343.576 3.055.45 4.654-.05m0 0C10.222 10.145 12.5 8.377 12.5 7 12.5 4.5 9 5.5 8 9c-.206.722-.328 1.381-.346 1.95zm0 0C7.584 13.133 9.032 13.983 13 12"
-              />
-            </svg>
-          </Button>
-          <Button
-            ripple={true}
-            color={activeTool === "Ellipse" ? "green" : "blue"}
-            onClick={handleEllipticalTool}
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              height="2em"
-              width="2em"
-              {...props}
-            >
-              <path d="M12 6c4.41 0 8 2.69 8 6s-3.59 6-8 6-8-2.69-8-6 3.59-6 8-6m0-2C6.5 4 2 7.58 2 12s4.5 8 10 8 10-3.58 10-8-4.5-8-10-8z" />
-            </svg>
-          </Button>
-          <Button
-            ripple={true}
-            color={activeTool === "Magnify" ? "green" : "blue"}
-            onClick={handleMagnifyTool}
-          >
-            <svg
-              viewBox="0 0 512 512"
-              fill="currentColor"
-              height="2em"
-              width="2em"
-              {...props}
-            >
-              <path d="M416 208c0 45.9-14.9 88.3-40 122.7l126.6 126.7c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0s208 93.1 208 208zM208 352c79.5 0 144-64.5 144-144S287.5 64 208 64 64 128.5 64 208s64.5 144 144 144z" />
-            </svg>
-          </Button>
-          <Button
-            ripple={true}
-            color={activeTool === "Rotate" ? "green" : "blue"}
-            onClick={handleRotateTool}
-          >
-            <svg
-              viewBox="0 0 512 512"
-              fill="currentColor"
-              height="2em"
-              width="2em"
-              {...props}
-            >
-              <path d="M142.9 142.9c62.2-62.2 162.7-62.5 225.3-1L327 183c-6.9 6.9-8.9 17.2-5.2 26.2S334.3 224 344 224h128c13.3 0 24-10.7 24-24V72c0-9.7-5.8-18.5-14.8-22.2S461.9 48.1 455 55l-41.6 41.6c-87.6-86.5-228.7-86.2-315.8 1-24.4 24.4-42 53.1-52.8 83.8-5.9 16.7 2.9 34.9 19.5 40.8s34.9-2.9 40.8-19.5c7.7-21.8 20.2-42.3 37.8-59.8zM16 312v128c0 9.7 5.8 18.5 14.8 22.2s19.3 1.7 26.2-5.2l41.6-41.6c87.6 86.5 228.7 86.2 315.8-1 24.4-24.4 42.1-53.1 52.9-83.7 5.9-16.7-2.9-34.9-19.5-40.8s-34.9 2.9-40.8 19.5c-7.7 21.8-20.2 42.3-37.8 59.8-62.2 62.2-162.7 62.5-225.3 1L185 329c6.9-6.9 8.9-17.2 5.2-26.2S177.7 288 168 288H40c-13.3 0-24 10.7-24 24z" />
-            </svg>
-          </Button>
-          <Button
-            ripple={true}
-            color={activeTool === "Shade" ? "green" : "blue"}
-            onClick={handleShadeTool}
-          >
-            Shade
-          </Button>
-        </div>
-        <div className="flex">
-          <div
-            className="m-4 bg-white w-[512px] h-[512px] rounded-lg mx-auto"
-            ref={viewerRef}
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-          >
-            {!imageLoaded && (
-              <div className="flex justify-center items-center">
-                <p className="text-black text-2xl my-auto mx-auto">
-                  No image loaded yet
-                </p>
-              </div>
-            )}
-          </div>
-          {clicked ? (
-            <div
-              className="m-4 bg-black w-[512px] h-[512px] rounded-lg flex justify-center items-center"
-              ref={yap}
-              onMouseDown={handleMouseDown}
-              onMouseMove={handleMouseMove}
-              onMouseUp={handleMouseUp}
-            ></div>
-          ) : (
-            <div></div>
-          )}
-        </div>
-
-        <div className="flex gap-10 items-center justify-between">
-          <div className="m-4 mt-1">
+          </Button> */}
             <Button
               ripple={true}
-              color="red"
-              onClick={saveAnnotations}
-              className=""
+              color={activeTool === "Probe" ? "green" : "blue"}
+              onClick={handleProbleTool}
+              size="sm"
             >
-              Save Annotaions
-            </Button>
-          </div>
-          <div className="bg-teal-300 rounded-lg p-1 m-3 mt-1 flex gap-4 items-center">
-            <h1 className="text-black text-1xl font-normal">
-              Download Annotations as:
-            </h1>
-            <Button className="" onClick={JsonFile}>
-              JSON File
-            </Button>
-            <Button className="" onClick={csvDownload}>
-              CSV File
-            </Button>
-          </div>
-          <Button
-            ripple={true}
-            color="purple"
-            onClick={lesgomask}
-            id="theButton"
-          >
-            Show Mask Images
-          </Button>
-          <Button ripple={true} color="purple" onClick={Summ} className="mr-3">
-            Summarise Masks
-          </Button>
-          <Dialog
-            open={open}
-            handler={Summ}
-            className="flex flex-col"
-            size="xl"
-          >
-            <DialogHeader className="mx-auto">Summarised Masks</DialogHeader>
-            <DialogBody className="gap-5 flex flex-col mx-auto bg-blue-gray-400">
-              <div className="flex">
-                <div
-                  ref={q1}
-                  className="m-4 bg-black w-[512px] h-[512px] rounded-lg"
-                ></div>
-                <div
-                  ref={q2}
-                  className="m-4 bg-black w-[512px] h-[512px] rounded-lg"
-                ></div>
-              </div>
-              <div className="flex justify-evenly">
-                <Button size="lg" className="w-40" onClick={Prev}>
-                  Previous
-                </Button>
-                <h2 className="text-black text-lg">
-                  {" "}
-                  {editedOnly.current[j]}th Image{" "}
-                </h2>
-                <Button size="lg" className="w-40" onClick={Next}>
-                  Next
-                </Button>
-              </div>
-            </DialogBody>
-            <DialogFooter>
-              <Button
-                variant="text"
-                color="red"
-                onClick={handleOpen}
-                className="mr-1"
+              <svg
+                name="dot-circle"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 512 512"
+                className="mx-auto"
+                height="3em"
+                width="3em"
+                fill="cyan"
               >
-                <span>Cancel</span>
-              </Button>
-              <Button variant="gradient" color="green" onClick={handleOpen}>
-                <span>Confirm</span>
-              </Button>
-            </DialogFooter>
-          </Dialog>
+                <title>Dot Circle</title>
+                <path d="M256 56c110.532 0 200 89.451 200 200 0 110.532-89.451 200-200 200-110.532 0-200-89.451-200-200 0-110.532 89.451-200 200-200m0-48C119.033 8 8 119.033 8 256s111.033 248 248 248 248-111.033 248-248S392.967 8 256 8zm0 168c-44.183 0-80 35.817-80 80s35.817 80 80 80 80-35.817 80-80-35.817-80-80-80z"></path>
+              </svg>
+            </Button>
+            <Button
+              ripple={true}
+              color={activeTool === "Rectangle" ? "green" : "blue"}
+              onClick={handleRectangleTool}
+              size="sm"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                className="mx-auto"
+                height="3em"
+                width="3em"
+                {...props}
+              >
+                <title>Rectangle</title>
+                <path d="M4 6v13h16V6H4m14 11H6V8h12v9z" />
+              </svg>
+            </Button>
+            <Button
+              ripple={true}
+              color={activeTool === "Eraser" ? "green" : "blue"}
+              onClick={handleEraserTool}
+              size="sm"
+            >
+              <svg
+                fill="currentColor"
+                viewBox="0 0 16 16"
+                className="mx-auto"
+                height="3em"
+                width="3em"
+                {...props}
+              >
+                <path d="M8.086 2.207a2 2 0 012.828 0l3.879 3.879a2 2 0 010 2.828l-5.5 5.5A2 2 0 017.879 15H5.12a2 2 0 01-1.414-.586l-2.5-2.5a2 2 0 010-2.828l6.879-6.879zm.66 11.34L3.453 8.254 1.914 9.793a1 1 0 000 1.414l2.5 2.5a1 1 0 00.707.293H7.88a1 1 0 00.707-.293l.16-.16z" />
+              </svg>
+            </Button>
+            <Button
+              ripple={true}
+              color={activeTool === "FHR" ? "green" : "blue"}
+              onClick={handleFHRTool}
+              size="sm"
+            >
+              <svg
+                fill="none"
+                viewBox="0 0 15 15"
+                className="mx-auto"
+                height="3em"
+                width="3em"
+                {...props}
+              >
+                <path
+                  stroke="currentColor"
+                  d="M1.5 5C3 2 7.3.5 6.5 2.5 5.5 5-.5 9.5 3 11c1.343.576 3.055.45 4.654-.05m0 0C10.222 10.145 12.5 8.377 12.5 7 12.5 4.5 9 5.5 8 9c-.206.722-.328 1.381-.346 1.95zm0 0C7.584 13.133 9.032 13.983 13 12"
+                />
+              </svg>
+            </Button>
+            <Button
+              ripple={true}
+              color={activeTool === "Ellipse" ? "green" : "blue"}
+              onClick={handleEllipticalTool}
+              size="sm"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                className="mx-auto"
+                height="3em"
+                width="3em"
+                {...props}
+              >
+                <path d="M12 6c4.41 0 8 2.69 8 6s-3.59 6-8 6-8-2.69-8-6 3.59-6 8-6m0-2C6.5 4 2 7.58 2 12s4.5 8 10 8 10-3.58 10-8-4.5-8-10-8z" />
+              </svg>
+            </Button>
+            <Button
+              ripple={true}
+              color={activeTool === "Magnify" ? "green" : "blue"}
+              onClick={handleMagnifyTool}
+              size="sm"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke-width="1.5"
+                stroke="currentColor"
+                className="mx-auto"
+                height="3em"
+                width="3em"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
+                />
+              </svg>
+            </Button>
+
+            <Button
+              ripple={true}
+              color={activeTool === "Rotate" ? "green" : "blue"}
+              onClick={handleRotateTool}
+              size="sm"
+            >
+              <svg
+                viewBox="0 0 512 512"
+                fill="currentColor"
+                className="mx-auto"
+                height="3em"
+                width="3em"
+                {...props}
+              >
+                <path d="M142.9 142.9c62.2-62.2 162.7-62.5 225.3-1L327 183c-6.9 6.9-8.9 17.2-5.2 26.2S334.3 224 344 224h128c13.3 0 24-10.7 24-24V72c0-9.7-5.8-18.5-14.8-22.2S461.9 48.1 455 55l-41.6 41.6c-87.6-86.5-228.7-86.2-315.8 1-24.4 24.4-42 53.1-52.8 83.8-5.9 16.7 2.9 34.9 19.5 40.8s34.9-2.9 40.8-19.5c7.7-21.8 20.2-42.3 37.8-59.8zM16 312v128c0 9.7 5.8 18.5 14.8 22.2s19.3 1.7 26.2-5.2l41.6-41.6c87.6 86.5 228.7 86.2 315.8-1 24.4-24.4 42.1-53.1 52.9-83.7 5.9-16.7-2.9-34.9-19.5-40.8s-34.9 2.9-40.8 19.5c-7.7 21.8-20.2 42.3-37.8 59.8-62.2 62.2-162.7 62.5-225.3 1L185 329c6.9-6.9 8.9-17.2 5.2-26.2S177.7 288 168 288H40c-13.3 0-24 10.7-24 24z" />
+              </svg>
+            </Button>
+            <Button
+              ripple={true}
+              color={activeTool === "Shade" ? "green" : "blue"}
+              onClick={handleShadeTool}
+              size="sm"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={1.5}
+                stroke="currentColor"
+                className="mx-auto"
+                height="3em"
+                width="3em"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z"
+                />
+              </svg>
+            </Button>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <Button
+              ripple={true}
+              color="purple"
+              onClick={saveAnnotations}
+              id="theButton"
+              className="text-sm"
+            >
+              Save Annotations
+            </Button>
+            <Button
+              ripple={true}
+              color="purple"
+              onClick={lesgomask}
+              id="theButton"
+              className="text-sm"
+            >
+              Show Mask Images
+            </Button>
+            <Button
+              ripple={true}
+              color="purple"
+              onClick={Summ}
+              className="text-sm"
+            >
+              Summarise Masks
+            </Button>
+            <Dialog
+              open={open}
+              handler={Summ}
+              className="flex flex-col"
+              size="xl"
+            >
+              <DialogHeader className="mx-auto">Summarised Masks</DialogHeader>
+              <DialogBody className="gap-5 flex flex-col mx-auto bg-blue-gray-400">
+                <div className="flex">
+                  <div
+                    ref={q1}
+                    className="m-4 bg-black w-[512px] h-[512px] rounded-lg"
+                  ></div>
+                  <div
+                    ref={q2}
+                    className="m-4 bg-black w-[512px] h-[512px] rounded-lg"
+                  ></div>
+                </div>
+                <div className="flex justify-evenly">
+                  <Button size="lg" className="w-40" onClick={Prev}>
+                    Previous
+                  </Button>
+                  <h2 className="text-black text-lg">
+                    {" "}
+                    {editedOnly.current[j]}th Image{" "}
+                  </h2>
+                  <Button size="lg" className="w-40" onClick={Next}>
+                    Next
+                  </Button>
+                </div>
+              </DialogBody>
+              <DialogFooter>
+                <Button
+                  variant="text"
+                  color="red"
+                  onClick={handleOpen}
+                  className="mr-1"
+                >
+                  <span>Cancel</span>
+                </Button>
+                <Button variant="gradient" color="green" onClick={handleOpen}>
+                  <span>Confirm</span>
+                </Button>
+              </DialogFooter>
+            </Dialog>
+            <div className="mt-20 flex flex-col">
+              <h1 className="text-white text-xl mb-4 mx-auto">Mask image</h1>
+              <div
+                className=" bg-black w-[512px] h-[512px] rounded-lg flex justify-center items-center"
+                ref={yap}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+              ></div>
+            </div>
+          </div>
         </div>
-      </div>
-      <div className="flex flex-col">
-        <h1 className="text-2xl text-white text-center">Tips</h1>
-        <h3 className="text-l text-white">
-          1. When you want to erase Freehand annotations, please use the zoom
-          tool. 2. Zoom and Pan tool go hand in hand for annotating purpose.
-        </h3>
       </div>
     </div>
   );

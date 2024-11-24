@@ -19,7 +19,7 @@ const Login = () => {
       });
 
       const { user, token } = response.data;
-
+      console.log(response);
       // Store the token and user details in localStorage
       localStorage.setItem("token", token);
       localStorage.setItem("user", JSON.stringify(user));

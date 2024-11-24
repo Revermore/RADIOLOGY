@@ -1,0 +1,34 @@
+1) Forgot password logic in Login.js
+3) Add loading states
+4) personal greet using login details- add unique ids
+5) Custom role based access - P1
+6) Contact us in home page
+7) Predictions made should be stored in db and also dcm folder - P2
+--------
+Request:
+1) After doc performs annotations gotta ensure size of json object aint past 16MB.
+
+
+
+---------
+Question:
+-> For efficiency after the ai engineer downloads the files, can they be removed from the DB.
+->
+
+---------
+To do:
+1) Admin: 3 tables, one with doc details and the other 2 are for icom series that are messed with(json file and dcm series) and not messed with (dcm series)
+--Admin should be able to upload a dicom series from their own local storage.
+-- The dicom series that are messed with or not messed with should have a general name given by frontend but the admin must have an option to change that name.
+2)Doctor: done but can be improved like
+- Doctors must be able to either upload their own dicom series or get the one sent to them.
+- Make sure that the dicom shower works for dicom images of any dimensions.
+3) AI: a table with finished annotations and they can download both the dcm folder and json.
+
+
+
+- Admin uploads dcm folder to a specific Doctor
+    - An upload button in each row of the doctors table for each doctor
+    - After upload is done it should be updated dynamically in the table where "not messed with" dicom files are kept
+- Doctor gets a notification that he got a job to do, performs annotations and saves
+- Saved shit (json file, dicom folder) is stored #TODO somewhere, then the third table (messed with) is updated and the AI tools engineer can download it
