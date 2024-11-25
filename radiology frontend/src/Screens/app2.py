@@ -1,6 +1,5 @@
 import os
 from io import BytesIO
-
 import cv2
 import numpy as np
 import tensorflow as tf
@@ -35,7 +34,7 @@ app.config['Upload_benign'] = Benign
 H, W = 256, 768
 
 # Load the pre-trained malignant model
-model_path_malignant = "model.keras"  # Update this path as needed
+model_path_malignant = "model_malignant.keras"  # Update this path as needed
 with CustomObjectScope({"dice_coef": dice_coef, "dice_loss": dice_loss}):
     malignant_model = tf.keras.models.load_model(model_path_malignant)
 

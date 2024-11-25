@@ -39,7 +39,6 @@ const Header = () => {
                     <li><Link to='hero' smooth={true} offset={0} duration={500} className="hover:text-gray-300 cursor-pointer">Home</Link></li>
                     <li><Link to='features' smooth={true} offset={-70} duration={500} className="hover:text-gray-300 cursor-pointer">Features</Link></li>
                     <li><Link to='about' smooth={true} offset={-60} duration={500} className="hover:text-gray-300 cursor-pointer">About</Link></li>
-                    <li><Link to='contact' smooth={true} offset={-40} duration={500} className="hover:text-gray-300 cursor-pointer">Contact</Link></li>
                     <li><p onClick={logout} className="btn bg-white text-purple-700 px-4 py-2 rounded hover:bg-gray-200 cursor-pointer">Log-out</p></li>
                 </ul>
 

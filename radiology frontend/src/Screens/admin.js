@@ -9,10 +9,10 @@ import {
 import axios from "axios";
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { checkDicomHeader } from "./dicomUtils"; // Adjust the path if needed
 
-const Admin = () => {
-  const TABLE_HEAD = ["ID", "Doctor name", "Email", "Department", ""]; // Table headers
+const Admin = (props) => {
+  const TABLE_HEAD1 = ["ID", "Doctor name", "Email", "Department", ""]; // Table headers
+  const TABLE_HEAD2 = ["Doctor Name", "Folder Name", ""]; // Table headers
   const navigate = useNavigate();
   const [radiologists, setRadiologists] = useState([]); // Doctors' data
   const [loading, setLoading] = useState(true);
@@ -22,6 +22,9 @@ const Admin = () => {
   const [docid, setDocid] = useState("");
   const [dirname, setDirname] = useState(""); // Directory name state
   const uploadedFiles = useRef([]);
+  const [folders, setFolders] = useState([]);
+  const [doctorInfo, setDoctorInfo] = useState([]);
+
   // Fetch and authenticate user on component mount
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
@@ -47,25 +50,75 @@ const Admin = () => {
     };
 
     fetchRadiologists();
+
+    const fetchFolders = async () => {
+      try {
+        // Fetch outer folders (doctor emails)
+        const response = await axios.get("http://localhost:8000/getAIFolders");
+        const folderEmails = response.data.folders; // Array of emails from the folders
+        setFolders(folderEmails);
+
+        if (folderEmails && folderEmails.length > 0) {
+          await fetchDoctorInfo(folderEmails); // Fetch corresponding doctor info
+        }
+      } catch (err) {
+        console.error("Error fetching folders:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    const fetchDoctorInfo = async (emails) => {
+      const doctorData = [];
+      for (let email of emails) {
+        try {
+          // Fetch doctor info
+          const doctorResponse = await axios.get(
+            `http://localhost:5000/auth/doctor/${email}`
+          );
+          const doctor = doctorResponse.data;
+
+          // Fetch subfolders for each doctor
+          const subfoldersResponse = await axios.get(
+            `http://localhost:8000/getSubFolders/${email}`
+          );
+          const subfolders = subfoldersResponse.data.subfolders;
+
+          // Add doctor info along with subfolder names
+          subfolders.forEach((subfolder) => {
+            doctorData.push({
+              name: doctor.name,
+              email: doctor.email,
+              subfolder,
+            });
+          });
+        } catch (err) {
+          console.error(`Error fetching info for ${email}:`, err);
+        }
+      }
+      setDoctorInfo(doctorData); // Store the full list of doctor-subfolder data
+    };
+
+    fetchFolders();
   }, [navigate]);
 
-  const validateUploadedFiles = async (files) => {
-    try {
-      for (const file of files) {
-        const fileUrl = URL.createObjectURL(file); // Temporarily create a blob URL
-        const isValid = await checkDicomHeader(fileUrl);
-        if (!isValid) throw new Error(`Invalid DICOM file: ${file.name}`);
-      }
-      console.log("All files are valid DICOM files!");
-      return true;
-    } catch (err) {
-      console.error("File validation failed:", err.message);
-      alert(
-        "One or more files are invalid DICOM files. Please check and try again."
-      );
-      return false;
-    }
-  };
+  // const validateUploadedFiles = async (files) => {
+  //   try {
+  //     for (const file of files) {
+  //       const fileUrl = URL.createObjectURL(file); // Temporarily create a blob URL
+  //       const isValid = await checkDicomHeader(fileUrl);
+  //       if (!isValid) throw new Error(`Invalid DICOM file: ${file.name}`);
+  //     }
+  //     console.log("All files are valid DICOM files!");
+  //     return true;
+  //   } catch (err) {
+  //     console.error("File validation failed:", err.message);
+  //     alert(
+  //       "One or more files are invalid DICOM files. Please check and try again."
+  //     );
+  //     return false;
+  //   }
+  // };
 
   // Log changes to the directory name
   useEffect(() => {
@@ -86,6 +139,52 @@ const Admin = () => {
     setDocid(event.target.id);
     setOpen(true); // Open dialog for folder name input
   };
+  const handleDownload = async (email, subfolderName) => {
+    try {
+      const encodedEmail = encodeURIComponent(email);
+      const encodedSubfolderName = encodeURIComponent(subfolderName);
+      console.log("Downloading folder:", subfolderName, "for email:", email);
+      console.log("Encoded email:", encodedEmail);
+      console.log("Encoded subfolder name:", encodedSubfolderName);
+
+      const response = await axios.get(
+        `http://localhost:8000/downloadFolder/${encodedEmail}/${encodedSubfolderName}`,
+        {
+          responseType: "blob",
+          validateStatus: function (status) {
+            return status >= 200 && status < 300;
+          },
+        }
+      );
+
+      if (!(response.data instanceof Blob)) {
+        throw new Error("Response is not a blob");
+      }
+
+      // Trigger the file download
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `${subfolderName}.zip`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Download error:", error);
+      if (error.response) {
+        const errorMessage =
+          error.response.data instanceof Blob
+            ? "Server error"
+            : error.response.data.message || "Unknown server error";
+        alert(`Download failed: ${errorMessage}`);
+      } else if (error.request) {
+        alert("No response from server. Please check your connection.");
+      } else {
+        alert(`Error: ${error.message}`);
+      }
+    }
+  };
 
   // Handle directory name input
   const onChangeName = ({ target }) => setDirname(target.value);
@@ -93,8 +192,8 @@ const Admin = () => {
   // Finalize folder upload process
   const Summ = async () => {
     if (dirname) {
-      const isValid = await validateUploadedFiles(uploadedFiles.current);
-      if (!isValid) return; // Stop if validation fails
+      // const isValid = await validateUploadedFiles(uploadedFiles.current);
+      // if (!isValid) return; // Stop if validation fails
       console.log("Folder Name Confirmed:", dirname);
       console.log("Uploaded Files:", uploadedFiles);
       console.log(docid);
@@ -160,11 +259,13 @@ const Admin = () => {
           <p className="text-red-500">{error}</p>
         ) : (
           <div className="flex flex-col items-center w-screen mt-10">
-            <h1 className="text-2xl text-white">Doctor - Upload Dicom Series folder</h1>
+            <h1 className="text-2xl text-white">
+              Doctor - Upload Dicom Series
+            </h1>
             <table className="mt-4 table-auto text-center w-4/6">
               <thead className="bg-indigo-500">
                 <tr>
-                  {TABLE_HEAD.map((head) => (
+                  {TABLE_HEAD1.map((head) => (
                     <th
                       key={head}
                       className="border-y border-blue-gray-100 bg-blue-gray-50/50 p-4"
@@ -293,6 +394,80 @@ const Admin = () => {
                 })}
               </tbody>
             </table>
+            <div className="flex flex-col items-center w-screen mt-10">
+              <h1 className="text-2xl text-white">
+                Uploaded Annotated Dicom series
+              </h1>
+              <table className="mt-4 table-auto text-center w-4/6">
+                <thead className="bg-indigo-500">
+                  <tr>
+                    {TABLE_HEAD2.map((head) => (
+                      <th
+                        key={head}
+                        className="border-y border-blue-gray-100 bg-blue-gray-50/50 p-4"
+                      >
+                        <Typography
+                          variant="h4"
+                          color="black"
+                          className="font-normal leading-none"
+                        >
+                          {head}
+                        </Typography>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="bg-white">
+                  {doctorInfo.map(({ name, subfolder, email }, index) => {
+                    const isLast = index === doctorInfo.length - 1;
+                    const classes = isLast
+                      ? "p-4"
+                      : "p-4 border-b border-blue-gray-50";
+
+                    return (
+                      <tr key={email + subfolder}>
+                        <td className={classes}>
+                          <Typography
+                            variant="h5"
+                            color="blue-gray"
+                            className="font-normal"
+                          >
+                            {name}
+                          </Typography>
+                        </td>
+                        <td className={classes}>
+                          <Typography
+                            variant="h5"
+                            color="blue-gray"
+                            className="font-normal"
+                          >
+                            {subfolder}
+                          </Typography>
+                        </td>
+                        <td className={classes}>
+                          <Button
+                            variant="gradient"
+                            className="flex items-center gap-3"
+                            size="sm"
+                            onClick={() => handleDownload(email, subfolder)}
+                          >
+                            <svg
+                              viewBox="0 0 1024 1024"
+                              fill="currentColor"
+                              height="2em"
+                              width="2em"
+                              {...props}
+                            >
+                              <path d="M505.7 661a8 8 0 0012.6 0l112-141.7c4.1-5.2.4-12.9-6.3-12.9h-74.1V168c0-4.4-3.6-8-8-8h-60c-4.4 0-8 3.6-8 8v338.3H400c-6.7 0-10.4 7.7-6.3 12.9l112 141.8zM878 626h-60c-4.4 0-8 3.6-8 8v154H214V634c0-4.4-3.6-8-8-8h-60c-4.4 0-8 3.6-8 8v198c0 17.7 14.3 32 32 32h684c17.7 0 32-14.3 32-32V634c0-4.4-3.6-8-8-8z" />
+                            </svg>
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>

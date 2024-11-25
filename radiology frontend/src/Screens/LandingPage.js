@@ -5,6 +5,7 @@ import Header from "../components/Header";
 import Admin from "./admin";
 import AiEng from "./AiEng";
 import Mis from "./mis";
+import Else from "./Else";
 
 const LandingPage = () => {
   const navigate = useNavigate();
@@ -48,6 +49,7 @@ const LandingPage = () => {
       <div className="bg-[#0A0A23] h-full flex flex-col gap-20">
         <Header />
         <Admin />
+        <Else />
         <Footer />
       </div>
     );
@@ -56,6 +58,7 @@ const LandingPage = () => {
       <div className="bg-[#0A0A23] h-full flex flex-col gap-20">
         <Header />
         <AiEng />
+        <Else />
         <Footer />
       </div>
     );
